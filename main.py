@@ -13,7 +13,9 @@ last_mix = None
 while True:
     try:
         data = requests.get(RADIO_URL, timeout=10, verify=False).json()
-        current = data["now_playing"]["song"]["text"]
+
+        station = data[0]  # ВАЖНО
+        current = station["now_playing"]["song"]["text"]
 
         if current != last_mix:
             msg = f"СЕЙЧАС В ЭФИРЕ:\n{current}"
