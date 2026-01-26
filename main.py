@@ -17,43 +17,47 @@ while True:
         response = requests.get(RADIO_URL, timeout=10, verify=False)
         data = response.json()
 
+        # Проверка структуры
+        # print(json.dumps(data, indent=2))
+
         if isinstance(data, list):
             station = data[0]
         else:
             station = data
 
-        # Текущий трек
-        song_text = station["now_playing"]["song"]["text"]
-        cover_url = station["now_playing"]["song"].get("art")
+        song_data = station["now_playing"]["song"]
+        song_text = song_data.get("text", "Unknown")
+        cover_url = song_data.get("art")  # обложка
 
         if " - " in song_text:
             artist, title = song_text.split(" - ", 1)
         else:
             artist, title = song_text, ""
 
-        current_msg = (
+        formatted_msg = (
             f"<b>{artist}</b> - {title}\n\n"
             f'<a href="{RADIO_LINK}">слушать радио</a>'
         )
 
-        # Отправляем текущий трек
         if song_text != last_mix:
             if cover_url:
+                # Отправка с обложкой
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
                     data={
                         "chat_id": CHAT_ID,
                         "photo": cover_url,
-                        "caption": current_msg,
+                        "caption": formatted_msg,
                         "parse_mode": "HTML"
                     }
                 )
             else:
+                # Если обложки нет
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                     data={
                         "chat_id": CHAT_ID,
-                        "text": current_msg,
+                        "text": formatted_msg,
                         "parse_mode": "HTML"
                     }
                 )
