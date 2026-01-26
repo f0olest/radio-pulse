@@ -14,6 +14,17 @@ DEFAULT_COVER = "https://spotandchoos.com/assets/default_radio_cover.jpg"  # fal
 last_mix = None
 announced_next = None
 
+def safe_cover(url):
+    """Проверка, что обложка доступна; если нет — fallback"""
+    try:
+        if url:
+            r = requests.head(url, timeout=5, verify=False)
+            if r.status_code == 200:
+                return url
+    except Exception:
+        pass
+    return DEFAULT_COVER
+
 while True:
     try:
         response = requests.get(RADIO_URL, timeout=10, verify=False)
@@ -27,7 +38,7 @@ while True:
         # --- текущий трек ---
         song_data = station["now_playing"]["song"]
         song_text = song_data.get("text", "Unknown")
-        cover_url = song_data.get("art") or DEFAULT_COVER
+        cover_url = safe_cover(song_data.get("art"))
 
         if " - " in song_text:
             artist, title = song_text.split(" - ", 1)
@@ -67,7 +78,7 @@ while True:
                 else:
                     next_artist, next_title = next_text, ""
 
-                next_cover = next_song_data.get("art") or DEFAULT_COVER
+                next_cover = safe_cover(next_song_data.get("art"))
 
                 next_msg = (
                     f"Через 5 минут в эфире:\n"
@@ -89,5 +100,4 @@ while True:
     except Exception as e:
         print("error:", e)
 
-    # --- ожидание перед следующим циклом ---
     time.sleep(60)
