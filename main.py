@@ -17,15 +17,13 @@ while True:
         response = requests.get(RADIO_URL, timeout=10, verify=False)
         data = response.json()
 
-        # Debug: посмотреть структуру JSON
-        # print(json.dumps(data, indent=2))
-
         if isinstance(data, list):
             station = data[0]
         else:
             station = data
 
         song_text = station["now_playing"]["song"]["text"]
+        cover_url = station["now_playing"]["song"].get("art")  # обложка, если есть
 
         # Разбиваем текст на artist - title
         if " - " in song_text:
@@ -33,21 +31,31 @@ while True:
         else:
             artist, title = song_text, ""
 
-        formatted_msg = (
-            f"СЕЙЧАС В ЭФИРЕ:\n"
+        formatted_caption = (
             f"<b>{artist}</b> - {title}\n\n"
             f'<a href="{RADIO_LINK}">слушать радио</a>'
         )
 
         if song_text != last_mix:
-            requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                data={
-                    "chat_id": CHAT_ID,
-                    "text": formatted_msg,
-                    "parse_mode": "HTML"  # <- чтобы ссылка и жирный шрифт работали
-                }
-            )
+            if cover_url:  # если есть обложка, отправляем фото
+                requests.post(
+                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                    data={
+                        "chat_id": CHAT_ID,
+                        "photo": cover_url,
+                        "caption": formatted_caption,
+                        "parse_mode": "HTML"
+                    }
+                )
+            else:  # если нет обложки, просто отправляем текст
+                requests.post(
+                    f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                    data={
+                        "chat_id": CHAT_ID,
+                        "text": formatted_caption,
+                        "parse_mode": "HTML"
+                    }
+                )
             last_mix = song_text
 
     except Exception as e:
