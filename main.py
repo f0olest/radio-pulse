@@ -11,6 +11,7 @@ RADIO_LINK = "https://spotandchoos.com/radiotma"
 
 last_mix_id = None
 message_id = None
+coming_up_sent = False  # флаг, чтобы не спамить coming up
 
 def format_time(seconds):
     m, s = divmod(int(seconds), 60)
@@ -45,21 +46,17 @@ while True:
         next_artist = next_song_data.get("artist", "скоро новый микс") if next_song_data else "скоро новый микс"
         next_title = next_song_data.get("title", "") if next_song_data else ""
 
-        bar, percent = build_progress_bar(elapsed, duration)
+        bar, percent = build_progress_bar(elapsed, duration, length=10)
 
-        # формируем текст
+        # формируем текст текущего трека
         text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{artist}</b> - {title}\n\n"
-
         if elapsed < duration:
             text += f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
-            if percent >= 80:
-                text += f"coming up:\n<b>{next_artist}</b> - {next_title}\n\n"
-
         text += f'<a href="{RADIO_LINK}">слушать радио</a>'
 
         # новый трек
         if song_id != last_mix_id:
-            # если предыдущее сообщение есть — очищаем прогресс
+            # если предыдущее сообщение есть — убираем прогресс
             if message_id:
                 old_text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{song.get('artist','Unknown')}</b> - {song.get('title','Unknown')}\n\n<a href='{RADIO_LINK}'>слушать радио</a>"
                 requests.post(
@@ -82,6 +79,7 @@ while True:
             ).json()
             message_id = resp["result"]["message_id"]
             last_mix_id = song_id
+            coming_up_sent = False  # сброс флага на новый трек
 
         # обновление прогресса
         else:
@@ -95,6 +93,19 @@ while True:
                         "parse_mode": "HTML"
                     }
                 )
+
+        # отправка отдельного сообщения "coming up next", если прогресс >= 90% и ещё не отправляли
+        if percent >= 90 and not coming_up_sent and next_song_data:
+            coming_text = f"coming up next:\n<b>{next_artist}</b> - {next_title}"
+            requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                data={
+                    "chat_id": CHAT_ID,
+                    "text": coming_text,
+                    "parse_mode": "HTML"
+                }
+            )
+            coming_up_sent = True
 
     except Exception as e:
         print("error:", e)
