@@ -1,6 +1,7 @@
 import requests
 import time
 import urllib3
+from datetime import datetime
 
 urllib3.disable_warnings()
 
@@ -50,8 +51,15 @@ while True:
 
         # формируем текст текущего трека
         text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{artist}</b> - {title}\n\n"
+
         if elapsed < duration:
+            # обычный прогресс
             text += f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+        else:
+            # трек закончился → finished at <time>
+            now_time = datetime.utcnow().strftime("%H:%M:%S")
+            text += f"finished at {now_time}\n\n"
+
         text += f'<a href="{RADIO_LINK}">слушать радио</a>'
 
         # новый трек
@@ -81,7 +89,7 @@ while True:
             last_mix_id = song_id
             coming_up_sent = False  # сброс флага на новый трек
 
-        # обновление прогресса
+        # обновление прогресса текущего трека
         else:
             if message_id:
                 requests.post(
@@ -95,7 +103,7 @@ while True:
                 )
 
         # отправка отдельного сообщения "coming up next", если прогресс >= 90% и ещё не отправляли
-        if percent >= 90 and not coming_up_sent and next_song_data:
+        if percent >= 90 and not coming_up_sent and next_song_data and elapsed < duration:
             coming_text = f"coming up next:\n<b>{next_artist}</b> - {next_title}"
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
