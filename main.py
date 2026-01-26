@@ -1,7 +1,6 @@
 import requests
 import time
 import urllib3
-import json
 
 urllib3.disable_warnings()
 
@@ -10,68 +9,86 @@ TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
 CHAT_ID = "@sncpr"
 RADIO_LINK = "https://spotandchoos.com/radiotma"
 
-last_mix = None
-announced_next = None
+last_mix_id = None
+message_id = None
+
+def format_time(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    else:
+        return f"{m:02d}:{s:02d}"
+
+def build_progress_bar(elapsed, duration, length=10):
+    percent = int((elapsed / duration) * 100) if duration > 0 else 0
+    filled = int(length * percent / 100)
+    empty = length - filled
+    bar = "#" * filled + "~" * empty
+    return f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})"
 
 while True:
     try:
-        response = requests.get(RADIO_URL, timeout=10, verify=False)
-        data = response.json()
+        data = requests.get(RADIO_URL, timeout=10, verify=False).json()
         station = data[0] if isinstance(data, list) else data
+        song = station["now_playing"]["song"]
+        song_id = song.get("id")
+        artist = song.get("artist", "Unknown")
+        title = song.get("title", "Unknown")
+        elapsed = station["now_playing"].get("elapsed", 0)
+        duration = station["now_playing"].get("duration", 1)  # избегаем деления на 0
 
-        # --- текущий трек ---
-        song_data = station["now_playing"]["song"]
-        song_text = song_data.get("text", "Unknown")
-        artist = song_data.get("artist", "")
-        title = song_data.get("title", "")
+        # --- проверяем, новый трек или тот же ---
+        if song_id != last_mix_id:
+            # новое сообщение
+            msg_text = (
+                f"СЕЙЧАС В ЭФИРЕ:\n"
+                f"<b>{artist}</b> - {title}\n\n"
+                f"progress:\n{build_progress_bar(elapsed, duration)}\n\n"
+                f'<a href="{RADIO_LINK}">слушать радио</a>'
+            )
 
-        current_msg = (
-            f"СЕЙЧАС В ЭФИРЕ:\n"
-            f"<b>{artist}</b> - {title}\n\n"
-            f'<a href="{RADIO_LINK}">слушать радио</a>'
-        )
-
-        if song_text != last_mix:
-            requests.post(
+            resp = requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                 data={
                     "chat_id": CHAT_ID,
-                    "text": current_msg,
+                    "text": msg_text,
                     "parse_mode": "HTML"
                 }
-            )
-            last_mix = song_text
-            announced_next = None
+            ).json()
 
-        # --- анонс следующего трека за 5 минут ---
-        next_data = station.get("playing_next", {})
-        next_song = next_data.get("song")
-        next_cued_at = next_data.get("cued_at")
+            message_id = resp["result"]["message_id"]
+            last_mix_id = song_id
 
-        if next_song and next_cued_at:
-            send_time = next_cued_at - 5 * 60
-            now_ts = int(time.time())
-            if send_time > now_ts and announced_next != next_song.get("id"):
-                next_artist = next_song.get("artist", "")
-                next_title = next_song.get("title", "")
-
-                next_msg = (
-                    f"Через 5 минут в эфире:\n"
-                    f"<b>{next_artist}</b> - {next_title}\n\n"
-                    f'<a href="{RADIO_LINK}">слушать радио</a>'
-                )
+        else:
+            # обновляем прогресс
+            if message_id:
+                # если трек уже закончился
+                if elapsed >= duration:
+                    text = (
+                        f"СЕЙЧАС В ЭФИРЕ:\n"
+                        f"<b>{artist}</b> - {title}\n\n"
+                        f'<a href="{RADIO_LINK}">слушать радио</a>'
+                    )
+                else:
+                    text = (
+                        f"СЕЙЧАС В ЭФИРЕ:\n"
+                        f"<b>{artist}</b> - {title}\n\n"
+                        f"progress:\n{build_progress_bar(elapsed, duration)}\n\n"
+                        f'<a href="{RADIO_LINK}">слушать радио</a>'
+                    )
 
                 requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
                     data={
                         "chat_id": CHAT_ID,
-                        "text": next_msg,
+                        "message_id": message_id,
+                        "text": text,
                         "parse_mode": "HTML"
                     }
                 )
-                announced_next = next_song.get("id")
 
     except Exception as e:
         print("error:", e)
 
-    time.sleep(60)
+    time.sleep(300)  # каждые 5 минут
