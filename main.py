@@ -1,6 +1,7 @@
 import requests
 import time
 import urllib3
+import json
 
 urllib3.disable_warnings()
 
@@ -12,11 +13,22 @@ last_mix = None
 
 while True:
     try:
-        data = requests.get(RADIO_URL, timeout=10, verify=False).json()
+        response = requests.get(RADIO_URL, timeout=10, verify=False)
+        data = response.json()
 
-        station = data[0]  # ВАЖНО
+        # Debug: раскомментировать для просмотра структуры JSON
+        # print(json.dumps(data, indent=2))
+
+        # Подстраиваемся под то, что приходит: массив или объект
+        if isinstance(data, list):
+            station = data[0]
+        else:
+            station = data
+
+        # Достаём текущий трек
         current = station["now_playing"]["song"]["text"]
 
+        # Проверяем, поменялся ли трек
         if current != last_mix:
             msg = f"СЕЙЧАС В ЭФИРЕ:\n{current}"
             requests.post(
@@ -28,4 +40,5 @@ while True:
     except Exception as e:
         print("error:", e)
 
+    # Пауза перед следующим запросом
     time.sleep(60)
