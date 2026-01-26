@@ -2,7 +2,6 @@ import requests
 import time
 import urllib3
 import json
-from datetime import datetime
 
 urllib3.disable_warnings()
 
@@ -12,7 +11,6 @@ CHAT_ID = "@sncpr"
 RADIO_LINK = "https://spotandchoos.com/radiotma"
 
 last_mix = None
-announced_next = None  # чтобы не спамить анонсом
 
 while True:
     try:
@@ -38,8 +36,8 @@ while True:
             f'<a href="{RADIO_LINK}">слушать радио</a>'
         )
 
+        # Отправляем текущий трек
         if song_text != last_mix:
-            # Отправляем текущее сообщение
             if cover_url:
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
@@ -60,37 +58,6 @@ while True:
                     }
                 )
             last_mix = song_text
-            announced_next = None  # сбрасываем анонс при смене трека
-
-        # Анонс следующего трека за 5 минут
-        next_song_data = station["now_playing"].get("next_song")
-        if next_song_data and next_song_data.get("text") and next_song_data.get("start_time"):
-            next_text = next_song_data["text"]
-            start_time = next_song_data["start_time"]  # timestamp
-            send_time = start_time - 5 * 60
-            now_ts = int(time.time())
-
-            if now_ts >= send_time and announced_next != next_text:
-                if " - " in next_text:
-                    next_artist, next_title = next_text.split(" - ", 1)
-                else:
-                    next_artist, next_title = next_text, ""
-
-                next_msg = (
-                    f"Через 5 минут в эфире:\n"
-                    f"<b>{next_artist}</b> - {next_title}\n\n"
-                    f'<a href="{RADIO_LINK}">слушать радио</a>'
-                )
-
-                requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "text": next_msg,
-                        "parse_mode": "HTML"
-                    }
-                )
-                announced_next = next_text
 
     except Exception as e:
         print("error:", e)
