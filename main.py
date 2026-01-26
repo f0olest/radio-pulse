@@ -22,11 +22,8 @@ while True:
         # --- текущий трек ---
         song_data = station["now_playing"]["song"]
         song_text = song_data.get("text", "Unknown")
-
-        if " - " in song_text:
-            artist, title = song_text.split(" - ", 1)
-        else:
-            artist, title = song_text, ""
+        artist = song_data.get("artist", "")
+        title = song_data.get("title", "")
 
         current_msg = (
             f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -44,22 +41,19 @@ while True:
                 }
             )
             last_mix = song_text
-            announced_next = None  # сброс анонса при смене трека
+            announced_next = None
 
         # --- анонс следующего трека за 5 минут ---
-        next_song_data = station.get("playing_next", {}).get("song")
-        next_cued_at = station.get("playing_next", {}).get("cued_at")
+        next_data = station.get("playing_next", {})
+        next_song = next_data.get("song")
+        next_cued_at = next_data.get("cued_at")
 
-        if next_song_data and next_cued_at:
+        if next_song and next_cued_at:
             send_time = next_cued_at - 5 * 60
             now_ts = int(time.time())
-            next_text = next_song_data.get("text", "Unknown")
-
-            if now_ts >= send_time and announced_next != next_text:
-                if " - " in next_text:
-                    next_artist, next_title = next_text.split(" - ", 1)
-                else:
-                    next_artist, next_title = next_text, ""
+            if send_time > now_ts and announced_next != next_song.get("id"):
+                next_artist = next_song.get("artist", "")
+                next_title = next_song.get("title", "")
 
                 next_msg = (
                     f"Через 5 минут в эфире:\n"
@@ -75,7 +69,7 @@ while True:
                         "parse_mode": "HTML"
                     }
                 )
-                announced_next = next_text
+                announced_next = next_song.get("id")
 
     except Exception as e:
         print("error:", e)
