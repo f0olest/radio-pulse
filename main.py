@@ -24,7 +24,8 @@ def format_time(seconds):
 def progress_bar(elapsed, duration, length=10):
     percent = int((elapsed / duration) * 100) if duration > 0 else 0
     filled = int(length * percent / 100)
-    return "#" * filled + "~" * (length - filled), percent
+    bar = "█" * filled + "░" * (length - filled)
+    return bar, percent
 
 while True:
     try:
@@ -46,7 +47,7 @@ while True:
 
         bar, percent = progress_bar(elapsed, duration)
 
-        # ===== ЕСЛИ ТРЕК СМЕНИЛСЯ =====
+        # === ЕСЛИ ТРЕК СМЕНИЛСЯ → ЗАКРЫВАЕМ СТАРЫЙ ===
         if last_song_id and song_id != last_song_id and current_message_id:
             finished_text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -65,7 +66,7 @@ while True:
             )
             coming_up_sent = False
 
-        # ===== НОВЫЙ ТРЕК (С УВЕДОМЛЕНИЕМ) =====
+        # === НОВЫЙ ТРЕК (С УВЕДОМЛЕНИЕМ) ===
         if song_id != last_song_id:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -80,7 +81,7 @@ while True:
                     "chat_id": CHAT_ID,
                     "text": text,
                     "parse_mode": "HTML",
-                    "disable_notification": False  # 🔊 ВАЖНО
+                    "disable_notification": False
                 }
             ).json()
 
@@ -89,7 +90,7 @@ while True:
             prev_artist = artist
             prev_title = title
 
-        # ===== ПРОГРЕСС (ТИХО) =====
+        # === ПРОГРЕСС (ТИХОЕ ОБНОВЛЕНИЕ) ===
         else:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -108,17 +109,16 @@ while True:
                 }
             )
 
-        # ===== COMING UP NEXT (БЕЗ УВЕДОМЛЕНИЯ) =====
+        # === COMING UP NEXT (БЕЗ УВЕДОМЛЕНИЯ) ===
         if percent >= 90 and not coming_up_sent and next_song:
             coming_text = f"NEXT\n<b>{next_artist}</b> - {next_title}"
-
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                 data={
                     "chat_id": CHAT_ID,
                     "text": coming_text,
                     "parse_mode": "HTML",
-                    "disable_notification": True  # 🔕 ВАЖНО
+                    "disable_notification": True
                 }
             )
             coming_up_sent = True
@@ -126,4 +126,4 @@ while True:
     except Exception as e:
         print("error:", e)
 
-    time.sleep(15)
+    time.sleep(60)  # обновление раз в минуту — спокойный премиум
