@@ -27,7 +27,7 @@ while True:
 
         song_text = station["now_playing"]["song"]["text"]
 
-        # Разбиваем текст на artist - title, если нужно
+        # Разбиваем текст на artist - title
         if " - " in song_text:
             artist, title = song_text.split(" - ", 1)
         else:
@@ -35,7 +35,7 @@ while True:
 
         formatted_msg = (
             f"СЕЙЧАС В ЭФИРЕ:\n"
-            f"{artist} - {title}\n\n"
+            f"<b>{artist}</b> - {title}\n\n"
             f'<a href="{RADIO_LINK}">слушать радио</a>'
         )
 
@@ -45,7 +45,7 @@ while True:
                 data={
                     "chat_id": CHAT_ID,
                     "text": formatted_msg,
-                    "parse_mode": "HTML"  # <- чтобы ссылка работала
+                    "parse_mode": "HTML"  # <- чтобы ссылка и жирный шрифт работали
                 }
             )
             last_mix = song_text
