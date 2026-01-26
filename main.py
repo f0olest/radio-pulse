@@ -9,21 +9,9 @@ RADIO_URL = "https://80.93.61.249/api/nowplaying"
 TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
 CHAT_ID = "@sncpr"
 RADIO_LINK = "https://spotandchoos.com/radiotma"
-DEFAULT_COVER = "https://spotandchoos.com/assets/default_radio_cover.jpg"  # fallback
 
 last_mix = None
 announced_next = None
-
-def safe_cover(url):
-    """Проверка, что обложка доступна; если нет — fallback"""
-    try:
-        if url:
-            r = requests.head(url, timeout=5, verify=False)
-            if r.status_code == 200:
-                return url
-    except Exception:
-        pass
-    return DEFAULT_COVER
 
 while True:
     try:
@@ -38,7 +26,6 @@ while True:
         # --- текущий трек ---
         song_data = station["now_playing"]["song"]
         song_text = song_data.get("text", "Unknown")
-        cover_url = safe_cover(song_data.get("art"))
 
         if " - " in song_text:
             artist, title = song_text.split(" - ", 1)
@@ -51,13 +38,12 @@ while True:
         )
 
         if song_text != last_mix:
-            # Отправка текущего трека
+            # Отправка текста
             requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                 data={
                     "chat_id": CHAT_ID,
-                    "photo": cover_url,
-                    "caption": formatted_msg,
+                    "text": formatted_msg,
                     "parse_mode": "HTML"
                 }
             )
@@ -78,8 +64,6 @@ while True:
                 else:
                     next_artist, next_title = next_text, ""
 
-                next_cover = safe_cover(next_song_data.get("art"))
-
                 next_msg = (
                     f"Через 5 минут в эфире:\n"
                     f"<b>{next_artist}</b> - {next_title}\n\n"
@@ -87,11 +71,10 @@ while True:
                 )
 
                 requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                    f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                     data={
                         "chat_id": CHAT_ID,
-                        "photo": next_cover,
-                        "caption": next_msg,
+                        "text": next_msg,
                         "parse_mode": "HTML"
                     }
                 )
