@@ -10,72 +10,68 @@ TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
 CHAT_ID = "@sncpr"
 RADIO_LINK = "https://spotandchoos.com/radiotma"
 
-last_mix_id = None
-message_id = None
-coming_up_sent = False  # флаг, чтобы не спамить coming up
+last_song_id = None
+current_message_id = None
+coming_up_sent = False
 
 def format_time(seconds):
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
-    if h > 0:
-        return f"{h:02d}:{m:02d}:{s:02d}"
-    else:
-        return f"{m:02d}:{s:02d}"
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
-def build_progress_bar(elapsed, duration, length=10):
+def progress_bar(elapsed, duration, length=10):
     percent = int((elapsed / duration) * 100) if duration > 0 else 0
     filled = int(length * percent / 100)
-    empty = length - filled
-    bar = "#" * filled + "~" * empty
-    return bar, percent
+    return "#" * filled + "~" * (length - filled), percent
 
 while True:
     try:
         data = requests.get(RADIO_URL, timeout=10, verify=False).json()
-        station = data[0] if isinstance(data, list) else data
+        station = data[0]
 
-        # текущий трек
-        song = station["now_playing"]["song"]
-        song_id = song.get("id")
+        now = station["now_playing"]
+        song = now["song"]
+
+        song_id = song["id"]
         artist = song.get("artist", "Unknown")
         title = song.get("title", "Unknown")
-        elapsed = station["now_playing"].get("elapsed", 0)
-        duration = station["now_playing"].get("duration", 1)  # защита от деления на 0
+        elapsed = now.get("elapsed", 0)
+        duration = now.get("duration", 1)
 
-        # следующий трек
-        next_song_data = station.get("playing_next", {}).get("song")
-        next_artist = next_song_data.get("artist", "скоро новый микс") if next_song_data else "скоро новый микс"
-        next_title = next_song_data.get("title", "") if next_song_data else ""
+        next_song = station.get("playing_next", {}).get("song")
+        next_artist = next_song.get("artist") if next_song else None
+        next_title = next_song.get("title") if next_song else None
 
-        bar, percent = build_progress_bar(elapsed, duration, length=10)
+        bar, percent = progress_bar(elapsed, duration)
 
-        # формируем текст текущего трека
-        text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{artist}</b> - {title}\n\n"
+        # ===== ЕСЛИ ТРЕК СМЕНИЛСЯ =====
+        if last_song_id and song_id != last_song_id and current_message_id:
+            finished_text = (
+                f"СЕЙЧАС В ЭФИРЕ:\n"
+                f"<b>{prev_artist}</b> - {prev_title}\n\n"
+                f"finished at {datetime.utcnow().strftime('%H:%M:%S')}\n\n"
+                f'<a href="{RADIO_LINK}">слушать радио</a>'
+            )
+            requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
+                data={
+                    "chat_id": CHAT_ID,
+                    "message_id": current_message_id,
+                    "text": finished_text,
+                    "parse_mode": "HTML"
+                }
+            )
 
-        if elapsed < duration:
-            # обычный прогресс
-            text += f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
-        else:
-            # трек закончился → finished at <time>
-            now_time = datetime.utcnow().strftime("%H:%M:%S")
-            text += f"finished at {now_time}\n\n"
+            coming_up_sent = False
 
-        text += f'<a href="{RADIO_LINK}">слушать радио</a>'
-
-        # новый трек
-        if song_id != last_mix_id:
-            # если предыдущее сообщение есть — убираем прогресс
-            if message_id:
-                old_text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{song.get('artist','Unknown')}</b> - {song.get('title','Unknown')}\n\n<a href='{RADIO_LINK}'>слушать радио</a>"
-                requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": message_id,
-                        "text": old_text,
-                        "parse_mode": "HTML"
-                    }
-                )
+        # ===== ЕСЛИ НОВЫЙ ТРЕК =====
+        if song_id != last_song_id:
+            text = (
+                f"СЕЙЧАС В ЭФИРЕ:\n"
+                f"<b>{artist}</b> - {title}\n\n"
+                f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+                f'<a href="{RADIO_LINK}">слушать радио</a>'
+            )
 
             resp = requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
@@ -85,25 +81,32 @@ while True:
                     "parse_mode": "HTML"
                 }
             ).json()
-            message_id = resp["result"]["message_id"]
-            last_mix_id = song_id
-            coming_up_sent = False  # сброс флага на новый трек
 
-        # обновление прогресса текущего трека
+            current_message_id = resp["result"]["message_id"]
+            last_song_id = song_id
+            prev_artist = artist
+            prev_title = title
+
+        # ===== ОБНОВЛЕНИЕ ПРОГРЕССА =====
         else:
-            if message_id:
-                requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": message_id,
-                        "text": text,
-                        "parse_mode": "HTML"
-                    }
-                )
+            text = (
+                f"СЕЙЧАС В ЭФИРЕ:\n"
+                f"<b>{artist}</b> - {title}\n\n"
+                f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+                f'<a href="{RADIO_LINK}">слушать радио</a>'
+            )
+            requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
+                data={
+                    "chat_id": CHAT_ID,
+                    "message_id": current_message_id,
+                    "text": text,
+                    "parse_mode": "HTML"
+                }
+            )
 
-        # отправка отдельного сообщения "coming up next", если прогресс >= 90% и ещё не отправляли
-        if percent >= 90 and not coming_up_sent and next_song_data and elapsed < duration:
+        # ===== COMING UP NEXT (отдельное сообщение) =====
+        if percent >= 90 and not coming_up_sent and next_song:
             coming_text = f"coming up next:\n<b>{next_artist}</b> - {next_title}"
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
@@ -118,4 +121,4 @@ while True:
     except Exception as e:
         print("error:", e)
 
-    time.sleep(15)  # обновляем каждые 15 секунд
+    time.sleep(15)
