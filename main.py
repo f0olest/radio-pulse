@@ -32,7 +32,7 @@ while True:
         data = requests.get(RADIO_URL, timeout=10, verify=False).json()
         station = data[0] if isinstance(data, list) else data
 
-        # --- текущий трек ---
+        # текущий трек
         song = station["now_playing"]["song"]
         song_id = song.get("id")
         artist = song.get("artist", "Unknown")
@@ -40,28 +40,38 @@ while True:
         elapsed = station["now_playing"].get("elapsed", 0)
         duration = station["now_playing"].get("duration", 1)  # защита от деления на 0
 
-        # --- следующий трек ---
+        # следующий трек
         next_song_data = station.get("playing_next", {}).get("song")
         next_artist = next_song_data.get("artist", "скоро новый микс") if next_song_data else "скоро новый микс"
         next_title = next_song_data.get("title", "") if next_song_data else ""
 
         bar, percent = build_progress_bar(elapsed, duration)
 
-        # --- формируем текст ---
+        # формируем текст
         text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{artist}</b> - {title}\n\n"
 
-        # добавляем прогресс только если трек не закончился
         if elapsed < duration:
             text += f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
-
-            # если прогресс > 80% — добавляем coming up
             if percent >= 80:
                 text += f"coming up:\n<b>{next_artist}</b> - {next_title}\n\n"
 
         text += f'<a href="{RADIO_LINK}">слушать радио</a>'
 
-        # --- новый трек ---
+        # новый трек
         if song_id != last_mix_id:
+            # если предыдущее сообщение есть — очищаем прогресс
+            if message_id:
+                old_text = f"СЕЙЧАС В ЭФИРЕ:\n<b>{song.get('artist','Unknown')}</b> - {song.get('title','Unknown')}\n\n<a href='{RADIO_LINK}'>слушать радио</a>"
+                requests.post(
+                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
+                    data={
+                        "chat_id": CHAT_ID,
+                        "message_id": message_id,
+                        "text": old_text,
+                        "parse_mode": "HTML"
+                    }
+                )
+
             resp = requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                 data={
@@ -73,7 +83,7 @@ while True:
             message_id = resp["result"]["message_id"]
             last_mix_id = song_id
 
-        # --- обновление прогресса ---
+        # обновление прогресса
         else:
             if message_id:
                 requests.post(
@@ -89,4 +99,4 @@ while True:
     except Exception as e:
         print("error:", e)
 
-    time.sleep(300)  # обновляем каждые 5 минут
+    time.sleep(15)  # обновляем каждые 15 секунд
