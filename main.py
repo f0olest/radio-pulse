@@ -13,6 +13,8 @@ RADIO_LINK = "https://spotandchoos.com/radiotma"
 last_song_id = None
 current_message_id = None
 coming_up_sent = False
+prev_artist = ""
+prev_title = ""
 
 def format_time(seconds):
     m, s = divmod(int(seconds), 60)
@@ -61,15 +63,14 @@ while True:
                     "parse_mode": "HTML"
                 }
             )
-
             coming_up_sent = False
 
-        # ===== ЕСЛИ НОВЫЙ ТРЕК =====
+        # ===== НОВЫЙ ТРЕК (С УВЕДОМЛЕНИЕМ) =====
         if song_id != last_song_id:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{artist}</b> - {title}\n\n"
-                f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+                f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
 
@@ -78,7 +79,8 @@ while True:
                 data={
                     "chat_id": CHAT_ID,
                     "text": text,
-                    "parse_mode": "HTML"
+                    "parse_mode": "HTML",
+                    "disable_notification": False  # 🔊 ВАЖНО
                 }
             ).json()
 
@@ -87,14 +89,15 @@ while True:
             prev_artist = artist
             prev_title = title
 
-        # ===== ОБНОВЛЕНИЕ ПРОГРЕССА =====
+        # ===== ПРОГРЕСС (ТИХО) =====
         else:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{artist}</b> - {title}\n\n"
-                f"progress:\n{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+                f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
+
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
                 data={
@@ -105,15 +108,17 @@ while True:
                 }
             )
 
-        # ===== COMING UP NEXT (отдельное сообщение) =====
+        # ===== COMING UP NEXT (БЕЗ УВЕДОМЛЕНИЯ) =====
         if percent >= 90 and not coming_up_sent and next_song:
-            coming_text = f"coming up next:\n<b>{next_artist}</b> - {next_title}"
+            coming_text = f"NEXT\n<b>{next_artist}</b> - {next_title}"
+
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
                 data={
                     "chat_id": CHAT_ID,
                     "text": coming_text,
-                    "parse_mode": "HTML"
+                    "parse_mode": "HTML",
+                    "disable_notification": True  # 🔕 ВАЖНО
                 }
             )
             coming_up_sent = True
