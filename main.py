@@ -2,6 +2,7 @@ import requests
 import time
 import urllib3
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 urllib3.disable_warnings()
 
@@ -9,6 +10,9 @@ RADIO_URL = "https://80.93.61.249/api/nowplaying"
 TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
 CHAT_ID = "@sncpr"
 RADIO_LINK = "https://spotandchoos.com/radiotma"
+
+# === ВАЖНО: таймзона эфира ===
+LOCAL_TZ = ZoneInfo("Asia/Novosibirsk")  # поменяй если надо
 
 last_song_id = None
 current_message_id = None
@@ -49,12 +53,15 @@ while True:
 
         # === ЕСЛИ ТРЕК СМЕНИЛСЯ → ЗАКРЫВАЕМ СТАРЫЙ ===
         if last_song_id and song_id != last_song_id and current_message_id:
+            finished_local_time = datetime.now(ZoneInfo("UTC")).astimezone(LOCAL_TZ)
+
             finished_text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{prev_artist}</b> - {prev_title}\n\n"
-                f"finished at {datetime.utcnow().strftime('%H:%M:%S')}\n\n"
+                f"finished at {finished_local_time.strftime('%H:%M:%S')}\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
+
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
                 data={
@@ -64,9 +71,10 @@ while True:
                     "parse_mode": "HTML"
                 }
             )
+
             coming_up_sent = False
 
-        # === НОВЫЙ ТРЕК (С УВЕДОМЛЕНИЕМ) ===
+        # === НОВЫЙ ТРЕК ===
         if song_id != last_song_id:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -90,7 +98,7 @@ while True:
             prev_artist = artist
             prev_title = title
 
-        # === ПРОГРЕСС (ТИХОЕ ОБНОВЛЕНИЕ) ===
+        # === ОБНОВЛЕНИЕ ПРОГРЕССА ===
         else:
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
@@ -109,7 +117,7 @@ while True:
                 }
             )
 
-        # === COMING UP NEXT (БЕЗ УВЕДОМЛЕНИЯ) ===
+        # === COMING UP NEXT ===
         if percent >= 90 and not coming_up_sent and next_song:
             coming_text = f"NEXT\n<b>{next_artist}</b> - {next_title}"
             requests.post(
@@ -126,4 +134,4 @@ while True:
     except Exception as e:
         print("error:", e)
 
-    time.sleep(60)  # обновление раз в минуту — спокойный премиум
+    time.sleep(60)
