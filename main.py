@@ -9,7 +9,7 @@ urllib3.disable_warnings()
 RADIO_URL = "https://80.93.61.249/api/nowplaying"
 TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
 CHAT_ID = "@sncpr"
-RADIO_LINK = "https://spotandchoos.com/radiotma"
+RADIO_LINK = "https://spotandchoos.com/radio"
 
 # === ВАЖНО: таймзона эфира ===
 LOCAL_TZ = ZoneInfo("Asia/Novosibirsk")  # поменяй если надо
