@@ -1,3 +1,35 @@
+import requests
+import time
+import urllib3
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+urllib3.disable_warnings()
+
+RADIO_URL = "https://80.93.61.249/api/nowplaying"
+TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
+CHAT_ID = "@sncpr"
+RADIO_LINK = "https://spotandchoos.com/radio"
+
+LOCAL_TZ = ZoneInfo("Asia/Novosibirsk")  # таймзона эфира
+
+last_song_id = None
+current_message_id = None
+coming_up_sent = False
+prev_artist = ""
+prev_title = ""
+
+def format_time(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+def progress_bar(elapsed, duration, length=10):
+    percent = int((elapsed / duration) * 100) if duration > 0 else 0
+    filled = int(length * percent / 100)
+    bar = "█" * filled + "░" * (length - filled)
+    return bar, percent
+
 while True:
     try:
         data = requests.get(RADIO_URL, timeout=10, verify=False).json()
@@ -11,6 +43,7 @@ while True:
         title = song.get("title", "Unknown")
         elapsed = now.get("elapsed", 0)
         duration = now.get("duration", 1)
+        art_url = song.get("art")  # обложка
 
         next_song = station.get("playing_next", {}).get("song")
         next_artist = next_song.get("artist") if next_song else None
@@ -18,7 +51,7 @@ while True:
 
         bar, percent = progress_bar(elapsed, duration)
 
-        # === ЕСЛИ ТРЕК СМЕНИЛСЯ → ЗАКРЫВАЕМ СТАРЫЙ ===
+        # === ТРЕК СМЕНИЛСЯ ===
         if last_song_id and song_id != last_song_id and current_message_id:
             finished_local_time = datetime.now(ZoneInfo("UTC")).astimezone(LOCAL_TZ)
 
@@ -43,36 +76,18 @@ while True:
 
         # === НОВЫЙ ТРЕК ===
         if song_id != last_song_id:
-            art_url = song.get("art")
-
-            caption = (
+            text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{artist}</b> - {title}\n\n"
                 f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
 
-            if art_url:
-                resp = requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "caption": caption,
-                        "parse_mode": "HTML",
-                        "disable_notification": False
-                    },
-                    files={"photo": requests.get(art_url).content}
-                ).json()
-            else:
-                resp = requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "text": caption,
-                        "parse_mode": "HTML",
-                        "disable_notification": False
-                    }
-                ).json()
+            resp = requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                data={"chat_id": CHAT_ID, "caption": text, "parse_mode": "HTML"},
+                files={"photo": requests.get(art_url).content} if art_url else None
+            ).json()
 
             current_message_id = resp["result"]["message_id"]
             last_song_id = song_id
@@ -81,37 +96,24 @@ while True:
 
         # === ОБНОВЛЕНИЕ ПРОГРЕССА ===
         else:
-            caption = (
+            text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{artist}</b> - {title}\n\n"
                 f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
 
-            # Обновляем подпись у фото
-            try:
-                requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageCaption",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": current_message_id,
-                        "caption": caption,
-                        "parse_mode": "HTML"
-                    }
-                )
-            except Exception as e:
-                # fallback, если нет фото, редактируем текст
-                requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": current_message_id,
-                        "text": caption,
-                        "parse_mode": "HTML"
-                    }
-                )
+            requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/editMessageCaption" if art_url else f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
+                data={
+                    "chat_id": CHAT_ID,
+                    "message_id": current_message_id,
+                    "caption" if art_url else "text": text,
+                    "parse_mode": "HTML"
+                }
+            )
 
-        # === COMING UP NEXT ===
+        # === COMING UP NEXT (только текст) ===
         if percent >= 90 and not coming_up_sent and next_song:
             coming_text = f"NEXT\n<b>{next_artist}</b> - {next_title}"
             requests.post(
