@@ -1,10 +1,10 @@
 import requests
 import time
-import urllib3
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import urllib3
 
-urllib3.disable_warnings()
+urllib3.disable_warnings()  # чтобы игнорировать SSL ошибки для картинок
 
 RADIO_URL = "https://80.93.61.249/api/nowplaying"
 TG_TOKEN = "8022390178:AAEzVQyZThtzNg0oDyBWy155T9dSWPm3MOo"
@@ -14,8 +14,8 @@ RADIO_LINK = "https://spotandchoos.com/radio"
 LOCAL_TZ = ZoneInfo("Asia/Novosibirsk")
 
 last_song_id = None
-current_text_id = None
-current_photo_id = None
+current_progress_id = None
+cover_message_id = None
 coming_up_sent = False
 prev_artist = ""
 prev_title = ""
@@ -35,6 +35,7 @@ while True:
     try:
         data = requests.get(RADIO_URL, timeout=10, verify=False).json()
         station = data[0]
+
         now = station["now_playing"]
         song = now["song"]
 
@@ -51,96 +52,77 @@ while True:
 
         bar, percent = progress_bar(elapsed, duration)
 
-        # --- Закрываем старый трек ---
+        # === Смена трека: закрываем старый прогресс и удаляем обложку ===
         if last_song_id and song_id != last_song_id:
-            finished_time = datetime.now(ZoneInfo("UTC")).astimezone(LOCAL_TZ)
-            finished_text = (
-                f"СЕЙЧАС В ЭФИРЕ:\n"
-                f"<b>{prev_artist}</b> - {prev_title}\n\n"
-                f"finished at {finished_time.strftime('%H:%M:%S')}\n\n"
-                f'<a href="{RADIO_LINK}">слушать радио</a>'
-            )
-            if current_text_id:
+            if current_progress_id:
+                finished_text = (
+                    f"СЕЙЧАС В ЭФИРЕ:\n"
+                    f"<b>{prev_artist}</b> - {prev_title}\n\n"
+                    f"finished at {datetime.now(ZoneInfo('UTC')).astimezone(LOCAL_TZ).strftime('%H:%M:%S')}\n\n"
+                    f'<a href="{RADIO_LINK}">слушать радио</a>'
+                )
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": current_text_id,
-                        "text": finished_text,
-                        "parse_mode": "HTML"
-                    }
+                    data={"chat_id": CHAT_ID, "message_id": current_progress_id, "text": finished_text, "parse_mode": "HTML"}
                 )
-            if current_photo_id:
+                current_progress_id = None
+
+            if cover_message_id:
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/deleteMessage",
-                    data={"chat_id": CHAT_ID, "message_id": current_photo_id}
+                    data={"chat_id": CHAT_ID, "message_id": cover_message_id}
                 )
+                cover_message_id = None
 
             coming_up_sent = False
 
-        # --- Новый трек ---
+        # === Новый трек ===
         if song_id != last_song_id:
-            # отправляем обложку, если есть
             if art_url:
-                resp_photo = requests.post(
+                resp_cover = requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
                     data={"chat_id": CHAT_ID, "disable_notification": True},
-                    files={"photo": requests.get(art_url, stream=True).raw}
+                    files={"photo": requests.get(art_url, stream=True, verify=False).raw}  # игнор SSL
                 ).json()
-                current_photo_id = resp_photo["result"]["message_id"]
+                cover_message_id = resp_cover["result"]["message_id"]
 
-            # отправляем текст с прогрессом
             text = (
                 f"СЕЙЧАС В ЭФИРЕ:\n"
                 f"<b>{artist}</b> - {title}\n\n"
                 f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
                 f'<a href="{RADIO_LINK}">слушать радио</a>'
             )
-            resp_text = requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                data={
-                    "chat_id": CHAT_ID,
-                    "text": text,
-                    "parse_mode": "HTML",
-                    "disable_notification": False
-                }
-            ).json()
 
-            current_text_id = resp_text["result"]["message_id"]
+            resp_progress = requests.post(
+                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML", "disable_notification": False}
+            ).json()
+            current_progress_id = resp_progress["result"]["message_id"]
+
             last_song_id = song_id
             prev_artist = artist
             prev_title = title
 
-        # --- Обновление прогресса ---
+        # === Обновление прогресса ===
         else:
-            if current_text_id:
-                text = (
-                    f"СЕЙЧАС В ЭФИРЕ:\n"
-                    f"<b>{artist}</b> - {title}\n\n"
-                    f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
-                    f'<a href="{RADIO_LINK}">слушать радио</a>'
-                )
+            text = (
+                f"СЕЙЧАС В ЭФИРЕ:\n"
+                f"<b>{artist}</b> - {title}\n\n"
+                f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+                f'<a href="{RADIO_LINK}">слушать радио</a>'
+            )
+            if current_progress_id:
                 requests.post(
                     f"https://api.telegram.org/bot{TG_TOKEN}/editMessageText",
-                    data={
-                        "chat_id": CHAT_ID,
-                        "message_id": current_text_id,
-                        "text": text,
-                        "parse_mode": "HTML"
-                    }
+                    data={"chat_id": CHAT_ID, "message_id": current_progress_id, "text": text, "parse_mode": "HTML"}
                 )
 
-        # --- COMING UP NEXT (только текст) ---
+        # === COMING UP NEXT (только текст) ===
         if percent >= 90 and not coming_up_sent and next_song:
             coming_text = f"NEXT\n<b>{next_artist}</b> - {next_title}"
             requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                data={
-                    "chat_id": CHAT_ID,
-                    "text": coming_text,
-                    "parse_mode": "HTML",
-                    "disable_notification": True
-                }
+                data={"chat_id": CHAT_ID, "text": coming_text, "parse_mode": "HTML", "disable_notification": True}
             )
             coming_up_sent = True
 
