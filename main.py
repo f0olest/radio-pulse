@@ -74,25 +74,45 @@ while True:
 
             coming_up_sent = False
 
-        # === НОВЫЙ ТРЕК ===
-        if song_id != last_song_id:
-            text = (
-                f"СЕЙЧАС В ЭФИРЕ:\n"
-                f"<b>{artist}</b> - {title}\n\n"
-                f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
-                f'<a href="{RADIO_LINK}">слушать радио</a>'
-            )
+       # === НОВЫЙ ТРЕК ===
+if song_id != last_song_id:
+    text = (
+        f"СЕЙЧАС В ЭФИРЕ:\n"
+        f"<b>{artist}</b> - {title}\n\n"
+        f"{bar} {percent}% ({format_time(elapsed)} / {format_time(duration)})\n\n"
+        f'<a href="{RADIO_LINK}">слушать радио</a>'
+    )
 
-            resp = requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
-                data={"chat_id": CHAT_ID, "caption": text, "parse_mode": "HTML"},
-                files={"photo": requests.get(art_url).content} if art_url else None
-            ).json()
+    # картинка арты
+    art_url = song.get("art")
+    if art_url:
+        # меняем IP на домен, чтобы SSL не падал
+        art_url = art_url.replace("80.93.61.249", "radio.spotandchoos.com")
+        try:
+            img_data = requests.get(art_url, verify=True).content
+            files = {"photo": ("art.jpg", img_data)}
+        except Exception as e:
+            print("Failed to load art:", e)
+            files = None
+    else:
+        files = None
 
-            current_message_id = resp["result"]["message_id"]
-            last_song_id = song_id
-            prev_artist = artist
-            prev_title = title
+    if files:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+            data={"chat_id": CHAT_ID, "caption": text, "parse_mode": "HTML"},
+            files=files
+        ).json()
+    else:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+        ).json()
+
+    current_message_id = resp["result"]["message_id"]
+    last_song_id = song_id
+    prev_artist = artist
+    prev_title = title
 
         # === ОБНОВЛЕНИЕ ПРОГРЕССА ===
         else:
